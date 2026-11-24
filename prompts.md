@@ -62,3 +62,7 @@ Asked what remains to finish the app. Recommended adding a fourth editable point
 ## 2026-11-23
 
 Add the remaining low-g feature and build it. Added a fourth editable point, segment-by-segment physics, and the Low-g crest preset. Headless Chrome checks passed at phone and desktop widths for simulated mouse and touch drags, the starter ride, both g-force stops, rollback, and Reset.
+
+## 2026-11-23
+
+Asked to test the app. Reran the Chrome checks at phone and desktop widths. All four preset rides, Reset, and simulated mouse and touch editing passed. Opened the local app in Chrome for hands-on testing.

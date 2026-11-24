@@ -70,3 +70,7 @@ Asked to test the app. Reran the Chrome checks at phone and desktop widths. All 
 ## 2026-11-23
 
 Asked why python app.py reports that the file is missing. The coaster runs from index.html, which can be opened directly in a browser.
+
+## 2026-11-23
+
+Run a hand calculation and compare expected and actual results. Checked the Starter valley using a 10 m drop and a 20 m curvature radius. The hand calculation, spec, and app readouts all matched at 31.33 mph and 2.00 g. Readouts were captured from the current app with a simulated animation clock.

@@ -1,0 +1,181 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roller Coaster Designer</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #101827; color: #f3f6fc; font: 1rem/1.5 system-ui, sans-serif; }
+  main { max-width: 1080px; margin: auto; padding: clamp(16px, 4vw, 48px); }
+  h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 3rem); letter-spacing: -.04em; }
+  h2 { margin: 0 0 .75rem; font-size: 1.1rem; }
+  p { color: #bfcde2; margin: .5rem 0 1.5rem; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(225px, .36fr); gap: 16px; }
+  section, aside { background: #182439; border: 1px solid #34455f; border-radius: 16px; padding: clamp(12px, 3vw, 24px); min-width: 0; }
+  .plots { margin-top: 16px; }
+  canvas { display: block; width: 100%; background: #111c2e; border-radius: 8px; }
+  #track { height: clamp(235px, 38vw, 390px); }
+  .plots canvas { height: 165px; }
+  .plots h2:not(:first-child) { margin-top: 1rem; }
+  .controls { display: flex; gap: 8px; }
+  button { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid #51627b; background: #263750; color: #d5deeb; font: inherit; }
+  dl { margin: 1.25rem 0 0; }
+  dt { color: #bfcde2; }
+  dd { margin: 0 0 1rem; font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  dd:last-child { margin-bottom: 0; }
+  @media (max-width: 680px) { .layout { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Roller Coaster Designer</h1>
+  <p>Stage 1 preview · Starter track and sample ride data</p>
+
+  <div class="layout">
+    <section aria-labelledby="track-title">
+      <h2 id="track-title">Starter track</h2>
+      <canvas id="track" role="img" aria-label="Track from a 10 meter starting point through a valley at 20 meters to a 2.5 meter hill at 30 meters. The car is parked at the start."></canvas>
+    </section>
+    <aside aria-labelledby="ride-title">
+      <h2 id="ride-title">Ride controls</h2>
+      <div class="controls">
+        <button type="button" disabled>Ride</button>
+        <button type="button" disabled>Reset</button>
+      </div>
+      <dl>
+        <dt>Speed at start</dt>
+        <dd>0.00 mph</dd>
+        <dt>Rider load at start</dt>
+        <dd>0.71 g</dd>
+        <dt>Sample at valley</dt>
+        <dd>31.33 mph · 2.00 g</dd>
+      </dl>
+    </aside>
+  </div>
+
+  <section class="plots" aria-label="Sample plots">
+    <h2>Speed (mph)</h2>
+    <canvas id="speed" role="img" aria-label="Sample speed increases to 31.33 miles per hour at the valley, then decreases."></canvas>
+    <h2>Rider load (g)</h2>
+    <canvas id="load" role="img" aria-label="Sample rider load peaks at 2 g, with limits marked at positive 4 g and negative 1 g."></canvas>
+  </section>
+</main>
+<script>
+  // Stage 1 draws a fixed track and sample values for the starter ride.
+  const starterTrack = [[0, 10], [20, 0], [30, 2.5]];
+  const distances = [0, 6.65, 12.55, 17.90, 22.96, 28.01, 33.36];
+  const speeds = [0, 20.72, 27.14, 30.34, 31.33, 30.34, 27.14];
+  const loads = [0.71, 1.02, 1.43, 1.83, 2.00, 1.83, 1.43];
+  const cyan = '#56e4df';
+  const amber = '#ffbd74';
+
+  function prepareChart(id, xMax, yMin, yMax, xTicks, yTicks, axisLabel) {
+    const canvas = document.getElementById(id);
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const density = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * density);
+    canvas.height = Math.round(height * density);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(density, density);
+
+    const left = 42;
+    const right = width - 23;
+    const top = 16;
+    const bottom = height - 47;
+    const x = value => left + (right - left) * value / xMax;
+    const y = value => bottom - (bottom - top) * (value - yMin) / (yMax - yMin);
+    ctx.font = '13px system-ui';
+    ctx.fillStyle = '#bfcde2';
+    ctx.strokeStyle = '#34455f';
+    ctx.beginPath();
+    ctx.textAlign = 'right';
+    for (const tick of yTicks) {
+      ctx.moveTo(left, y(tick));
+      ctx.lineTo(right, y(tick));
+      ctx.fillText(tick, left - 8, y(tick) + 4);
+    }
+    ctx.textAlign = 'center';
+    for (const tick of xTicks) {
+      ctx.moveTo(x(tick), top);
+      ctx.lineTo(x(tick), bottom);
+      ctx.fillText(tick, x(tick), bottom + 17);
+    }
+    ctx.stroke();
+    ctx.fillText(axisLabel, (left + right) / 2, height - 8);
+    return { ctx, x, y };
+  }
+
+  function drawTrack() {
+    const { ctx, x, y } = prepareChart('track', 33, -1, 12,
+      [0, 10, 20, 30], [0, 2.5, 5, 7.5, 10], 'Horizontal distance (m)');
+    ctx.strokeStyle = cyan;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(10));
+    ctx.quadraticCurveTo(x(15), y(-5), x(30), y(2.5));
+    ctx.stroke();
+
+    for (const [position, height] of starterTrack) {
+      ctx.beginPath();
+      ctx.arc(x(position), y(height), 7, 0, 2 * Math.PI);
+      ctx.fillStyle = '#111c2e';
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    }
+
+    const tangent = Math.atan2(y(9) - y(10), x(1) - x(0));
+    ctx.save();
+    ctx.translate(x(0), y(10));
+    ctx.rotate(tangent);
+    ctx.fillStyle = amber;
+    ctx.fillRect(-11, -17, 22, 11);
+    ctx.fillStyle = '#f3f6fc';
+    for (const wheel of [-6, 6]) {
+      ctx.beginPath();
+      ctx.arc(wheel, -5, 2.5, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawPlot(id, values, yMin, yMax, ticks, color, limits = []) {
+    const { ctx, x, y } = prepareChart(id, 34, yMin, yMax,
+      [0, 10, 20, 30], ticks, 'Distance along track (m)');
+    ctx.strokeStyle = '#ff8f91';
+    ctx.setLineDash([5, 4]);
+    for (const limit of limits) {
+      ctx.beginPath();
+      ctx.moveTo(x(0), y(limit));
+      ctx.lineTo(x(34), y(limit));
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(values[0]));
+    for (let i = 1; i < values.length; i++) {
+      ctx.lineTo(x(distances[i]), y(values[i]));
+    }
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(x(0), y(values[0]), 4, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function render() {
+    drawTrack();
+    drawPlot('speed', speeds, -2, 35, [0, 10, 20, 30], cyan);
+    drawPlot('load', loads, -1.5, 4.5, [-1, 0, 2, 4], amber, [-1, 4]);
+  }
+
+  render();
+  window.addEventListener('resize', render);
+</script>
+</body>
+</html>

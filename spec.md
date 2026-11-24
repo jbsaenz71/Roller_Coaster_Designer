@@ -6,6 +6,7 @@ A 2D roller coaster simulator for students. Shape a track, release a car from re
 
 - Drag the control points on a side-view grid to shape the track. Point coordinates are horizontal distance (x) from 0 to 200 m and height (h) from 0 to 60 m. Keep the points in left-to-right order with at least 1 m between them. The first point starts the ride and must be higher than the second point.
 - Start with three points at ((0,10)), ((20,0)), and ((30,2.5)), in meters.
+- Add a **Track preset** dropdown next to the ride controls. **Starter** is selected on open. **Rollback hill** loads (0, 10), (20, 0), and (45, 15.625). **High-g valley** loads (0, 10), (10, 0), and (15, 2.5). All coordinates are (horizontal distance, height) in meters. Choosing a preset replaces the current track, parks the car at the start, and clears the previous failure marker.
 - **Ride** starts the car from rest. **Reset** returns the car to the start and clears any failure marker. Editing the track resets the ride.
 
 # Calculations
@@ -18,6 +19,7 @@ A 2D roller coaster simulator for students. Shape a track, release a car from re
 # Outputs
 
 - Side view of the track with its control points, an animated car, and a labeled marker at the first failure point.
+- Next to the marker, show the failure reason, distance measured along the track from the start (m), speed (mph), and signed rider load (g) at the failure point. Keep those values fixed if the car rolls back. Use plain-language reasons such as “Car ran out of speed before the crest” and “Rider load crossed the 4 g limit.” If the failure is reported at a continuous threshold crossing, show the load at that location rather than inventing a higher reading.
 - Live speed in mph and signed rider g-force in g.
 - Two plots sharing a distance-along-track axis in meters. Show speed in mph and g-force in g, with a moving position indicator and the g-force limits marked.
 
@@ -32,6 +34,8 @@ Use the default points ((0,10)), ((20,0)), and ((30,2.5)) in meters. They lie on
 - **Speed at the first valley.** The car drops (10-0=10 mathrm{m}). By hand, (v=sqrt{2(9.81)(10)}=sqrt{196.2}approx14.01 mathrm{m/s}), or **31.33 mph**.
 - **Rider g-force at the valley.** By hand, (n=1+196.2/(9.81	imes20)=2.00), so the expected readout is **2.00 g**.
 - Once the app is built, ride the default track and compare its plotted values at the valley with these hand calculations, rounded to two decimal places.
+- **Rollback hill.** The curve returns to the starting height of 10 m at a horizontal position of 40 m. Check that the marker reports 0.00 mph there and that the marker and its readings stay in place as the car rolls back.
+- **High-g valley.** The drop is 10 m and the valley radius is 5 m, so the predicted load at the valley is 1 + 20/5 = 5.00 g. Check that the car stops at the first 4 g crossing before the valley and that the marker gives the reason, distance, speed, and rider load. Switch back to **Starter** and check that the marker clears.
 
 # Out of scope
 

@@ -22,3 +22,15 @@ Suggest how to build the roller coaster simulator in four to six stages. Propose
 ## 2026-11-23
 
 Asked for suggestions to improve the roller coaster simulator and thoughts on adding loops and Mickey Mouse as the rider. Suggested track presets and failure details, a loop preset after the core ride works, and an original rider for the app.
+
+## 2026-11-23
+
+Build Stage 1 and validate it against the spec. Created a local single-file mockup with the starter track, parked car, disabled ride controls, sample readouts, and plots. Independently checked all seven sample points, including 31.33 mph and 2.00 g at the valley. The canvas render and resize smoke checks passed using simulated canvases.
+
+## 2026-11-23
+
+Asked for suggestions to enhance the roller coaster app without building anything. Suggested linked plot inspection, precise control-point editing, clearer failure feedback, and a staged approach to adding loops.
+
+## 2026-11-23
+
+Add suggestion #3 to spec.md without building anything. Specified detailed failure markers, rollback and high-g track presets, and expected validation behavior for each.

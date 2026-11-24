@@ -38,3 +38,7 @@ Add suggestion #3 to spec.md without building anything. Specified detailed failu
 ## 2026-11-23
 
 Build Stage 2. Added track editing with mouse and touch pointer events, cubic Hermite interpolation, point constraints, and all three track presets. Simulated narrow and wide canvas checks passed for dragging, geometry, constraints, and preset selection. The plots still show labeled starter samples.
+
+## 2026-11-23
+
+Revalidate Stage 2 and build Stage 3 if it passes. Stage 2 passed simulated preset, geometry, pointer capture, spacing, and height checks. Stage 3 now calculates speed and signed rider load along the reachable track. Formula checks passed for the starter valley, both failure presets, a straight track, uphill starts, and drag updates.

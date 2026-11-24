@@ -15,7 +15,10 @@
   section, aside { background: #182439; border: 1px solid #34455f; border-radius: 16px; padding: clamp(12px, 3vw, 24px); min-width: 0; }
   .plots { margin-top: 16px; }
   canvas { display: block; width: 100%; background: #111c2e; border-radius: 8px; }
-  #track { height: clamp(235px, 38vw, 390px); }
+  #track { height: clamp(235px, 38vw, 390px); touch-action: none; cursor: grab; }
+  #track.dragging { cursor: grabbing; }
+  label { display: block; margin: 0 0 4px; }
+  select { width: 100%; min-height: 44px; margin-bottom: 12px; padding: 0 8px; border-radius: 8px; border: 1px solid #51627b; background: #263750; color: inherit; font: inherit; }
   .plots canvas { height: 165px; }
   .plots h2:not(:first-child) { margin-top: 1rem; }
   .controls { display: flex; gap: 8px; }
@@ -30,31 +33,39 @@
 <body>
 <main>
   <h1>Roller Coaster Designer</h1>
-  <p>Stage 1 preview · Starter track and sample ride data</p>
+  <p>Drag the three points to shape the track.</p>
 
   <div class="layout">
     <section aria-labelledby="track-title">
-      <h2 id="track-title">Starter track</h2>
-      <canvas id="track" role="img" aria-label="Track from a 10 meter starting point through a valley at 20 meters to a 2.5 meter hill at 30 meters. The car is parked at the start."></canvas>
+      <h2 id="track-title">Track editor</h2>
+      <canvas id="track" aria-label="Side view of the track with three draggable points."></canvas>
     </section>
     <aside aria-labelledby="ride-title">
       <h2 id="ride-title">Ride controls</h2>
+      <label for="preset">Track preset</label>
+      <select id="preset">
+        <option value="starter">Starter</option>
+        <option value="rollback">Rollback hill</option>
+        <option value="highG">High-g valley</option>
+        <option value="custom" disabled hidden>Custom</option>
+      </select>
       <div class="controls">
         <button type="button" disabled>Ride</button>
         <button type="button" disabled>Reset</button>
       </div>
       <dl>
-        <dt>Speed at start</dt>
+        <dt>Starter speed at start</dt>
         <dd>0.00 mph</dd>
-        <dt>Rider load at start</dt>
+        <dt>Starter rider load at start</dt>
         <dd>0.71 g</dd>
-        <dt>Sample at valley</dt>
+        <dt>Starter sample at valley</dt>
         <dd>31.33 mph · 2.00 g</dd>
       </dl>
     </aside>
   </div>
 
   <section class="plots" aria-label="Sample plots">
+    <p>Sample plots for the starter track</p>
     <h2>Speed (mph)</h2>
     <canvas id="speed" role="img" aria-label="Sample speed increases to 31.33 miles per hour at the valley, then decreases."></canvas>
     <h2>Rider load (g)</h2>
@@ -62,8 +73,17 @@
   </section>
 </main>
 <script>
-  // Stage 1 draws a fixed track and sample values for the starter ride.
-  const starterTrack = [[0, 10], [20, 0], [30, 2.5]];
+  const presets = {
+    starter: [[0, 10], [20, 0], [30, 2.5]],
+    rollback: [[0, 10], [20, 0], [45, 15.625]],
+    highG: [[0, 10], [10, 0], [15, 2.5]]
+  };
+  const trackCanvas = document.getElementById('track');
+  const preset = document.getElementById('preset');
+  let points = presets.starter.map(point => [...point]);
+  let trackChart;
+  let drag;
+  // The plots retain the starter samples until the physics stage.
   const distances = [0, 6.65, 12.55, 17.90, 22.96, 28.01, 33.36];
   const speeds = [0, 20.72, 27.14, 30.34, 31.33, 30.34, 27.14];
   const loads = [0.71, 1.02, 1.43, 1.83, 2.00, 1.83, 1.43];
@@ -107,17 +127,34 @@
     return { ctx, x, y };
   }
 
+  function trackSlopes() {
+    const [[x0, h0], [x1, h1], [x2, h2]] = points;
+    const firstSlope = (h1 - h0) / (x1 - x0);
+    const secondSlope = (h2 - h1) / (x2 - x1);
+    const quadratic = (secondSlope - firstSlope) / (x2 - x0);
+    return points.map(([x]) => firstSlope + quadratic * (2 * x - x0 - x1));
+  }
+
   function drawTrack() {
-    const { ctx, x, y } = prepareChart('track', 33, -1, 12,
-      [0, 10, 20, 30], [0, 2.5, 5, 7.5, 10], 'Horizontal distance (m)');
+    trackChart = prepareChart('track', 200, 0, 60,
+      [0, 50, 100, 150, 200], [0, 15, 30, 45, 60], 'Horizontal distance (m)');
+    const { ctx, x, y } = trackChart;
+    const slopes = trackSlopes();
+    const [startX, startHeight] = points[0];
     ctx.strokeStyle = cyan;
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(x(0), y(10));
-    ctx.quadraticCurveTo(x(15), y(-5), x(30), y(2.5));
+    ctx.moveTo(x(startX), y(startHeight));
+    for (let i = 0; i < points.length - 1; i++) {
+      const [x0, h0] = points[i];
+      const [x1, h1] = points[i + 1];
+      const span = (x1 - x0) / 3;
+      ctx.bezierCurveTo(x(x0 + span), y(h0 + slopes[i] * span),
+        x(x1 - span), y(h1 - slopes[i + 1] * span), x(x1), y(h1));
+    }
     ctx.stroke();
 
-    for (const [position, height] of starterTrack) {
+    for (const [position, height] of points) {
       ctx.beginPath();
       ctx.arc(x(position), y(height), 7, 0, 2 * Math.PI);
       ctx.fillStyle = '#111c2e';
@@ -126,9 +163,9 @@
       ctx.stroke();
     }
 
-    const tangent = Math.atan2(y(9) - y(10), x(1) - x(0));
+    const tangent = Math.atan2(y(startHeight + slopes[0]) - y(startHeight), x(1) - x(0));
     ctx.save();
-    ctx.translate(x(0), y(10));
+    ctx.translate(x(startX), y(startHeight));
     ctx.rotate(tangent);
     ctx.fillStyle = amber;
     ctx.fillRect(-11, -17, 22, 11);
@@ -140,6 +177,58 @@
     }
     ctx.restore();
   }
+
+  function pointerPosition(event) {
+    const bounds = trackCanvas.getBoundingClientRect();
+    return [event.clientX - bounds.left, event.clientY - bounds.top];
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  trackCanvas.addEventListener('pointerdown', event => {
+    if (drag || event.button !== 0) return;
+    const [pointerX, pointerY] = pointerPosition(event);
+    const { x, y } = trackChart;
+    const distances = points.map(([px, height]) => Math.hypot(pointerX - x(px), pointerY - y(height)));
+    const closest = Math.min(...distances);
+    if (closest > 22) return;
+    const index = distances.indexOf(closest);
+    const [px, height] = points[index];
+    drag = { index, pointerId: event.pointerId, offsetX: pointerX - x(px), offsetY: pointerY - y(height) };
+    trackCanvas.setPointerCapture(event.pointerId);
+    trackCanvas.classList.add('dragging');
+  });
+
+  trackCanvas.addEventListener('pointermove', event => {
+    if (drag?.pointerId !== event.pointerId) return;
+    const { index, offsetX, offsetY } = drag;
+    const [pointerX, pointerY] = pointerPosition(event);
+    const { x, y } = trackChart;
+    const minX = index === 0 ? 0 : points[index - 1][0] + 1;
+    const maxX = index === points.length - 1 ? 200 : points[index + 1][0] - 1;
+    const minHeight = index === 0 ? points[1][1] + 0.01 : 0;
+    const maxHeight = index === 1 ? points[0][1] - 0.01 : 60;
+    points[index] = [
+      clamp((pointerX - offsetX - x(0)) / (x(1) - x(0)), minX, maxX),
+      clamp((pointerY - offsetY - y(0)) / (y(1) - y(0)), minHeight, maxHeight)
+    ];
+    preset.value = 'custom';
+    drawTrack();
+  });
+
+  trackCanvas.addEventListener('lostpointercapture', event => {
+    if (drag?.pointerId !== event.pointerId) return;
+    drag = undefined;
+    trackCanvas.classList.remove('dragging');
+  });
+
+  preset.addEventListener('change', () => {
+    if (drag) trackCanvas.releasePointerCapture(drag.pointerId);
+    points = presets[preset.value].map(point => [...point]);
+    drawTrack();
+  });
 
   function drawPlot(id, values, yMin, yMax, ticks, color, limits = []) {
     const { ctx, x, y } = prepareChart(id, 34, yMin, yMax,

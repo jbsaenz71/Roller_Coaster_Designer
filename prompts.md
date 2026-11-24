@@ -34,3 +34,7 @@ Asked for suggestions to enhance the roller coaster app without building anythin
 ## 2026-11-23
 
 Add suggestion #3 to spec.md without building anything. Specified detailed failure markers, rollback and high-g track presets, and expected validation behavior for each.
+
+## 2026-11-23
+
+Build Stage 2. Added track editing with mouse and touch pointer events, cubic Hermite interpolation, point constraints, and all three track presets. Simulated narrow and wide canvas checks passed for dragging, geometry, constraints, and preset selection. The plots still show labeled starter samples.

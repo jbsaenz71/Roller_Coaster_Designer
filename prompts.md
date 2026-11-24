@@ -66,3 +66,7 @@ Add the remaining low-g feature and build it. Added a fourth editable point, seg
 ## 2026-11-23
 
 Asked to test the app. Reran the Chrome checks at phone and desktop widths. All four preset rides, Reset, and simulated mouse and touch editing passed. Opened the local app in Chrome for hands-on testing.
+
+## 2026-11-23
+
+Asked why python app.py reports that the file is missing. The coaster runs from index.html, which can be opened directly in a browser.

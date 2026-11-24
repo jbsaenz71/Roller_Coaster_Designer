@@ -54,3 +54,11 @@ Revalidate Stage 3, then build and validate Stage 4 if it passes. Stage 3 passed
 ## 2026-11-23
 
 Build and validate Stage 5, then validate all five stages together. Added high-g stops, rollback animation, and persistent failure details. Stage 5 checks passed for the high-g and rollback presets, marker clearing, and the lower-limit branch with synthetic data. The integrated five-stage regression passed at simulated narrow and wide widths. The current three-point track geometry cannot produce negative rider loads on its reachable segment.
+
+## 2026-11-23
+
+Asked what remains to finish the app. Recommended adding a fourth editable point and a verified low-g preset, then testing all ride outcomes in a browser with mouse and touch.
+
+## 2026-11-23
+
+Add the remaining low-g feature and build it. Added a fourth editable point, segment-by-segment physics, and the Low-g crest preset. Headless Chrome checks passed at phone and desktop widths for simulated mouse and touch drags, the starter ride, both g-force stops, rollback, and Reset.

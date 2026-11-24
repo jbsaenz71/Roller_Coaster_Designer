@@ -34,12 +34,13 @@
 <body>
 <main>
   <h1>Roller Coaster Designer</h1>
-  <p>Drag the three points to shape the track.</p>
+  <p>Drag the control points to shape the track.</p>
 
   <div class="layout">
     <section aria-labelledby="track-title">
       <h2 id="track-title">Track editor</h2>
-      <canvas id="track" aria-label="Side view of the track with three draggable points."></canvas>
+      <canvas id="track" aria-label="Side view of the track with draggable control points."></canvas>
+      <button id="add-point" type="button">Add fourth point</button>
       <p id="failure-details" role="status" hidden></p>
     </section>
     <aside aria-labelledby="ride-title">
@@ -49,6 +50,7 @@
         <option value="starter">Starter</option>
         <option value="rollback">Rollback hill</option>
         <option value="highG">High-g valley</option>
+        <option value="lowG">Low-g crest</option>
         <option value="custom" disabled hidden>Custom</option>
       </select>
       <div class="controls">
@@ -79,11 +81,13 @@
   const presets = {
     starter: [[0, 10], [20, 0], [30, 2.5]],
     rollback: [[0, 10], [20, 0], [45, 15.625]],
-    highG: [[0, 10], [10, 0], [15, 2.5]]
+    highG: [[0, 10], [10, 0], [15, 2.5]],
+    lowG: [[0, 10], [20, 2], [25, 3], [32, 1]]
   };
   const trackCanvas = document.getElementById('track');
   const preset = document.getElementById('preset');
   const rideButton = document.getElementById('ride');
+  const addPointButton = document.getElementById('add-point');
   const rideStatus = document.getElementById('ride-status');
   const failureDetails = document.getElementById('failure-details');
   let points = presets.starter.map(point => [...point]);
@@ -136,57 +140,110 @@
   }
 
   function trackSlopes() {
-    const [[x0, h0], [x1, h1], [x2, h2]] = points;
-    const firstSlope = (h1 - h0) / (x1 - x0);
-    const secondSlope = (h2 - h1) / (x2 - x1);
-    const quadratic = (secondSlope - firstSlope) / (x2 - x0);
-    return points.map(([x]) => firstSlope + quadratic * (2 * x - x0 - x1));
+    return points.map(([x], i) => {
+      const first = clamp(i - 1, 0, points.length - 3);
+      const [[x0, h0], [x1, h1], [x2, h2]] = points.slice(first, first + 3);
+      const firstSlope = (h1 - h0) / (x1 - x0);
+      const secondSlope = (h2 - h1) / (x2 - x1);
+      return firstSlope + (secondSlope - firstSlope) / (x2 - x0) * (2 * x - x0 - x1);
+    });
+  }
+
+  function trackSegments() {
+    const slopes = trackSlopes();
+    return points.slice(0, -1).map(([x, height], i) => {
+      const [nextX, nextHeight] = points[i + 1];
+      const width = nextX - x;
+      const rise = nextHeight - height;
+      const slope = slopes[i];
+      const endSlope = slopes[i + 1];
+      const b = (3 * rise - width * (2 * slope + endSlope)) / width ** 2;
+      const c = (-2 * rise + width * (slope + endSlope)) / width ** 3;
+      return { offset: x - points[0][0], width, slope, endSlope, b, c,
+        heightAt: u => height + u * (slope + u * (b + u * c)),
+        slopeAt: u => slope + u * (2 * b + 3 * c * u) };
+    });
+  }
+
+  function readingAt(segment, offset) {
+    const u = offset - segment.offset;
+    const slope = segment.slopeAt(u);
+    const height = segment.heightAt(u);
+    const grade = Math.hypot(1, slope);
+    const speedSquared = 2 * gravity * Math.max(0, points[0][1] - height);
+    const speedMps = Math.sqrt(speedSquared);
+    return { segment, offset, slope, height, speedMps,
+      speed: speedMps * mphPerMeterPerSecond,
+      load: 1 / grade + speedSquared * (2 * segment.b + 6 * segment.c * u) / (gravity * grade ** 3) };
+  }
+
+  function stationaryPoints({ slope, b, c, width }) {
+    const discriminant = b * b - 3 * c * slope;
+    const roots = Math.abs(c) < 1e-14 ? [-slope / (2 * b)] : discriminant >= 0
+      ? [(-b - Math.sqrt(discriminant)) / (3 * c), (-b + Math.sqrt(discriminant)) / (3 * c)] : [];
+    return roots.filter(u => u > 0 && u < width).sort((a, b) => a - b);
+  }
+
+  function bisect(low, high, isPast) {
+    for (let step = 0; step < 40; step++) {
+      const midpoint = (low + high) / 2;
+      if (isPast(midpoint)) high = midpoint;
+      else low = midpoint;
+    }
+    return (low + high) / 2;
   }
 
   function calculateProfile() {
-    // With three points, both Hermite segments reproduce the same quadratic.
-    const start = points[0][0];
-    const end = points[points.length - 1][0];
-    const slopes = trackSlopes();
-    const initialSlope = slopes[0];
-    const secondDerivative = (slopes[slopes.length - 1] - initialSlope) / (end - start);
-    const vertex = -initialSlope / secondDerivative;
-    let extent = initialSlope >= 0 ? 0 : end - start;
-    if (secondDerivative > 0 && 2 * vertex < extent) extent = 2 * vertex;
-    const valley = secondDerivative > 0 && vertex > 0 && vertex <= extent ? vertex : null;
-    const gradeLength = offset => Math.hypot(1, initialSlope + secondDerivative * offset);
-    function readingAt(offset) {
-      const slope = initialSlope + secondDerivative * offset;
-      const grade = gradeLength(offset);
-      const drop = Math.max(0, -offset * (initialSlope + secondDerivative * offset / 2));
-      const speedSquared = 2 * gravity * drop;
-      const speedMps = Math.sqrt(speedSquared);
-      return {
-        offset, slope, speedMps,
-        height: points[0][1] - drop,
-        speed: speedMps * mphPerMeterPerSecond,
-        load: 1 / grade + speedSquared * secondDerivative / (gravity * grade ** 3)
-      };
+    const segments = trackSegments();
+    const startHeight = points[0][1];
+    const samples = [];
+    let valley;
+    let outcome = 'complete';
+    for (const [index, segment] of segments.entries()) {
+      const { offset, width, heightAt, slopeAt } = segment;
+      const extrema = stationaryPoints(segment);
+      let extent = width;
+      if (index === 0 && segment.slope >= 0) {
+        extent = 0;
+        outcome = 'stall';
+      } else {
+        let previous = 0;
+        for (const u of [...extrema, width]) {
+          const difference = heightAt(u) - startHeight;
+          if (difference >= -1e-9) {
+            extent = difference > 1e-9 ? bisect(previous, u, value => heightAt(value) > startHeight) : u;
+            if (u !== width || extent < width || index < segments.length - 1 || Math.abs(slopeAt(extent)) < 1e-8) {
+              outcome = Math.abs(slopeAt(extent)) < 1e-8 ? 'stall' : 'rollback';
+            }
+            break;
+          }
+          previous = u;
+        }
+      }
+      const stops = extent === 0 ? [0] : [
+        ...Array.from({ length: 241 }, (_, i) => extent * i / 240),
+        ...extrema.filter(u => u < extent)
+      ].sort((a, b) => a - b).filter((u, i, sorted) => !i || u - sorted[i - 1] > 1e-11);
+      let previous = 0;
+      for (const u of stops) {
+        const reading = readingAt(segment, offset + u);
+        if (outcome !== 'complete' && extent > 0 && u === stops[stops.length - 1]) {
+          reading.speedMps = reading.speed = 0;
+        }
+        const last = samples[samples.length - 1];
+        const grade = at => Math.hypot(1, slopeAt(at));
+        const distance = (u - previous) / 6 * (grade(previous) + 4 * grade((previous + u) / 2) + grade(u));
+        reading.distance = (last?.distance ?? 0) + distance;
+        reading.time = (last?.time ?? 0) + (distance > 0 ? 2 * distance / (reading.speedMps + last.speedMps) : 0);
+        samples.push(reading);
+        if (!valley && u > 0 && Math.abs(reading.slope) < 1e-8 && 2 * segment.b + 6 * segment.c * u > 0) {
+          valley = reading;
+        }
+        previous = u;
+      }
+      if (outcome !== 'complete') break;
     }
-    const offsets = extent === 0 ? [0] : Array.from({ length: 241 }, (_, i) => extent * i / 240);
-    if (valley !== null && !offsets.includes(valley)) offsets.push(valley);
-    offsets.sort((a, b) => a - b);
-    let distance = 0;
-    let previous = 0;
-    const samples = offsets.map(offset => {
-      const grade = gradeLength(offset);
-      distance += (offset - previous) / 6 *
-        (gradeLength(previous) + 4 * gradeLength((previous + offset) / 2) + grade);
-      previous = offset;
-      return { ...readingAt(offset), distance, time: 0 };
-    });
-    for (let i = 1; i < samples.length; i++) {
-      const before = samples[i - 1];
-      const after = samples[i];
-      after.time = before.time + 2 * (after.distance - before.distance) / (before.speedMps + after.speedMps);
-    }
-    return { samples, readingAt, reachesEnd: extent === end - start,
-      valley: samples.find(sample => sample.offset === valley) };
+    return { samples, outcome, valley };
   }
 
   function drawTrack() {
@@ -297,6 +354,20 @@
     updateTrack();
   });
 
+  addPointButton.addEventListener('click', () => {
+    if (points.length >= 4) return;
+    const segments = trackSegments();
+    const widest = segments[1].width > segments[0].width ? 1 : 0;
+    const segment = segments[widest];
+    if (segment.width < 2) return;
+    const midpoint = segment.width / 2;
+    const heightLimit = widest === 0 ? points[0][1] - 0.01 : 60;
+    points.splice(widest + 1, 0, [points[widest][0] + midpoint,
+      clamp(segment.heightAt(midpoint), 0, heightLimit)]);
+    preset.value = 'custom';
+    updateTrack();
+  });
+
   function drawPlot(id, samples, field, xMax, xTicks, yMin, yMax, ticks, color, limits = []) {
     const { ctx, x, y } = prepareChart(id, xMax, yMin, yMax,
       xTicks, ticks, 'Distance along track (m)');
@@ -358,6 +429,8 @@
   }
 
   function updateTrack() {
+    addPointButton.disabled = points.length >= 4 ||
+      Math.max(points[1][0] - points[0][0], points[2][0] - points[1][0]) < 2;
     profile = calculateProfile();
     resetRide();
   }
@@ -369,23 +442,19 @@
     failureDetails.hidden = false;
   }
 
-  function firstLoadFailure({ samples, readingAt }) {
+  function firstLoadFailure({ samples }) {
     for (let i = 0; i < samples.length; i++) {
       const after = samples[i];
       if (after.load >= -1 && after.load <= 4) continue;
       const limit = after.load > 4 ? 4 : -1;
       const reason = 'Rider load crossed the ' + limit + ' g limit';
-      if (i === 0) return { ...after, reason };
       const before = samples[i - 1];
-      let low = before.offset;
-      let high = after.offset;
-      for (let step = 0; step < 40; step++) {
-        const midpoint = (low + high) / 2;
-        const load = readingAt(midpoint).load;
-        if (limit === 4 ? load > limit : load < limit) high = midpoint;
-        else low = midpoint;
-      }
-      const crossing = readingAt((low + high) / 2);
+      if (!before || before.segment !== after.segment) return { ...after, reason };
+      const offset = bisect(before.offset, after.offset, value => {
+        const { load } = readingAt(after.segment, value);
+        return limit === 4 ? load > limit : load < limit;
+      });
+      const crossing = readingAt(after.segment, offset);
       const fraction = (crossing.offset - before.offset) / (after.offset - before.offset);
       const distance = before.distance + (after.distance - before.distance) * fraction;
       const crossingSpeed = crossing.speedMps;
@@ -396,7 +465,7 @@
 
   function startRide() {
     resetRide();
-    const { samples, readingAt, reachesEnd } = profile;
+    const { samples, outcome } = profile;
     if (samples.length === 1) {
       markFailure(samples[0], 'Car stalled at the start');
       rideStatus.textContent = 'Ride stopped';
@@ -407,7 +476,7 @@
     rideStatus.textContent = 'Riding';
     const finish = samples[samples.length - 1];
     const loadFailure = firstLoadFailure(profile);
-    const rollsBack = !reachesEnd && !loadFailure;
+    const rollsBack = outcome === 'rollback' && !loadFailure;
     const stopTime = loadFailure?.time ?? (rollsBack ? 2 * finish.time : finish.time);
     let startedAt;
     function advance(timestamp) {
@@ -423,7 +492,8 @@
         animationFrame = null;
         rideButton.disabled = false;
         if (loadFailure) markFailure(loadFailure, loadFailure.reason);
-        rideStatus.textContent = loadFailure ? 'Ride stopped' : (rollsBack ? 'Rolled back to the start' : 'Ride complete');
+        else if (outcome === 'stall') markFailure(finish, 'Car stalled at the crest');
+        rideStatus.textContent = failure ? (rollsBack ? 'Rolled back to the start' : 'Ride stopped') : 'Ride complete';
       } else {
         const travelTime = returning ? 2 * finish.time - elapsed : elapsed;
         const segment = samples.findIndex(sample => sample.time >= travelTime && sample.time > 0);
@@ -434,7 +504,7 @@
         const progress = fraction * (2 * before.speedMps +
           (after.speedMps - before.speedMps) * fraction) / (before.speedMps + after.speedMps);
         position = {
-          ...readingAt(before.offset + (after.offset - before.offset) * progress),
+          ...readingAt(after.segment, before.offset + (after.offset - before.offset) * progress),
           distance: before.distance + (after.distance - before.distance) * progress
         };
         animationFrame = window.requestAnimationFrame(advance);

@@ -42,3 +42,11 @@ Build Stage 2. Added track editing with mouse and touch pointer events, cubic He
 ## 2026-11-23
 
 Revalidate Stage 2 and build Stage 3 if it passes. Stage 2 passed simulated preset, geometry, pointer capture, spacing, and height checks. Stage 3 now calculates speed and signed rider load along the reachable track. Formula checks passed for the starter valley, both failure presets, a straight track, uphill starts, and drag updates.
+
+## 2026-11-23
+
+Asked how many build stages there are. Confirmed five total, with three complete and two remaining.
+
+## 2026-11-23
+
+Revalidate Stage 3, then build and validate Stage 4 if it passes. Stage 3 passed the three preset checks. Stage 4 added a gravity-driven ride, live readouts and plot markers, and Reset. Simulated animation checks passed for launch, the hand-calculated valley values, slowdown, ride completion, Reset, and cancellation when changing the track.

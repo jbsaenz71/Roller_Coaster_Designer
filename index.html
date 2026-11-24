@@ -50,13 +50,14 @@
         <option value="custom" disabled hidden>Custom</option>
       </select>
       <div class="controls">
-        <button type="button" disabled>Ride</button>
-        <button type="button" disabled>Reset</button>
+        <button id="ride" type="button">Ride</button>
+        <button id="reset" type="button">Reset</button>
       </div>
+      <p id="ride-status" role="status">Ready to ride</p>
       <dl>
-        <dt>Speed at start</dt>
-        <dd>0.00 mph</dd>
-        <dt>Rider load at start</dt>
+        <dt>Speed</dt>
+        <dd id="ride-speed">0.00 mph</dd>
+        <dt>Rider load</dt>
         <dd id="start-load"></dd>
         <dt>First valley</dt>
         <dd id="valley-reading"></dd>
@@ -80,9 +81,14 @@
   };
   const trackCanvas = document.getElementById('track');
   const preset = document.getElementById('preset');
+  const rideButton = document.getElementById('ride');
+  const rideStatus = document.getElementById('ride-status');
   let points = presets.starter.map(point => [...point]);
   let trackChart;
   let drag;
+  let profile;
+  let position;
+  let animationFrame = null;
   const gravity = 9.81;
   const mphPerMeterPerSecond = 2.23694;
   const cyan = '#56e4df';
@@ -145,8 +151,21 @@
     if (secondDerivative > 0 && 2 * vertex < extent) extent = 2 * vertex;
     const valley = secondDerivative > 0 && vertex > 0 && vertex <= extent ? vertex : null;
     const gradeLength = offset => Math.hypot(1, initialSlope + secondDerivative * offset);
+    function readingAt(offset) {
+      const slope = initialSlope + secondDerivative * offset;
+      const grade = gradeLength(offset);
+      const drop = Math.max(0, -offset * (initialSlope + secondDerivative * offset / 2));
+      const speedSquared = 2 * gravity * drop;
+      const speedMps = Math.sqrt(speedSquared);
+      return {
+        offset, slope, speedMps,
+        height: points[0][1] - drop,
+        speed: speedMps * mphPerMeterPerSecond,
+        load: 1 / grade + speedSquared * secondDerivative / (gravity * grade ** 3)
+      };
+    }
     const offsets = extent === 0 ? [0] : Array.from({ length: 241 }, (_, i) => extent * i / 240);
-    if (valley !== null) offsets.push(valley);
+    if (valley !== null && !offsets.includes(valley)) offsets.push(valley);
     offsets.sort((a, b) => a - b);
     let distance = 0;
     let previous = 0;
@@ -155,16 +174,15 @@
       distance += (offset - previous) / 6 *
         (gradeLength(previous) + 4 * gradeLength((previous + offset) / 2) + grade);
       previous = offset;
-      const drop = Math.max(0, -offset * (initialSlope + secondDerivative * offset / 2));
-      const speedSquared = 2 * gravity * drop;
-      return {
-        offset,
-        distance,
-        speed: Math.sqrt(speedSquared) * mphPerMeterPerSecond,
-        load: 1 / grade + speedSquared * secondDerivative / (gravity * grade ** 3)
-      };
+      return { ...readingAt(offset), distance, time: 0 };
     });
-    return { samples, valley: samples.find(sample => sample.offset === valley) };
+    for (let i = 1; i < samples.length; i++) {
+      const before = samples[i - 1];
+      const after = samples[i];
+      after.time = before.time + 2 * (after.distance - before.distance) / (before.speedMps + after.speedMps);
+    }
+    return { samples, readingAt, reachesEnd: extent === end - start,
+      valley: samples.find(sample => sample.offset === valley) };
   }
 
   function drawTrack() {
@@ -195,9 +213,9 @@
       ctx.stroke();
     }
 
-    const tangent = Math.atan2(y(startHeight + slopes[0]) - y(startHeight), x(1) - x(0));
+    const tangent = Math.atan2(y(position.height + position.slope) - y(position.height), x(1) - x(0));
     ctx.save();
-    ctx.translate(x(startX), y(startHeight));
+    ctx.translate(x(startX + position.offset), y(position.height));
     ctx.rotate(tangent);
     ctx.fillStyle = amber;
     ctx.fillRect(-11, -17, 22, 11);
@@ -247,7 +265,7 @@
       clamp((pointerY - offsetY - y(0)) / (y(1) - y(0)), minHeight, maxHeight)
     ];
     preset.value = 'custom';
-    render();
+    updateTrack();
   });
 
   trackCanvas.addEventListener('lostpointercapture', event => {
@@ -259,7 +277,7 @@
   preset.addEventListener('change', () => {
     if (drag) trackCanvas.releasePointerCapture(drag.pointerId);
     points = presets[preset.value].map(point => [...point]);
-    render();
+    updateTrack();
   });
 
   function drawPlot(id, samples, field, xMax, xTicks, yMin, yMax, ticks, color, limits = []) {
@@ -284,14 +302,14 @@
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(x(0), y(samples[0][field]), 4, 0, 2 * Math.PI);
+    ctx.arc(x(position.distance), y(position[field]), 4, 0, 2 * Math.PI);
     ctx.fillStyle = color;
     ctx.fill();
   }
 
   function render() {
     drawTrack();
-    const { samples, valley } = calculateProfile();
+    const { samples, valley } = profile;
     const distanceMax = Math.max(4, Math.ceil(samples[samples.length - 1].distance / 4) * 4);
     const distanceTicks = [0, 1, 2, 3, 4].map(i => i * distanceMax / 4);
     const speedMax = Math.ceil(Math.max(1, ...samples.map(sample => sample.speed)) / 5) * 5;
@@ -303,13 +321,66 @@
     const loadPadding = (loadMax - loadMin) / 20;
     drawPlot('load', samples, 'load', distanceMax, distanceTicks, loadMin - loadPadding,
       loadMax + loadPadding, loadTicks, amber, [-1, 4]);
-    document.getElementById('start-load').textContent = samples[0].load.toFixed(2) + ' g';
+    document.getElementById('ride-speed').textContent = position.speed.toFixed(2) + ' mph';
+    document.getElementById('start-load').textContent = position.load.toFixed(2) + ' g';
     document.getElementById('valley-reading').textContent = valley
       ? valley.speed.toFixed(2) + ' mph · ' + valley.load.toFixed(2) + ' g'
       : 'No reachable valley';
   }
 
-  render();
+  function resetRide() {
+    if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+    animationFrame = null;
+    position = profile.samples[0];
+    rideButton.disabled = profile.samples.length === 1;
+    rideStatus.textContent = rideButton.disabled ? 'Car cannot start from rest on this track' : 'Ready to ride';
+    render();
+  }
+
+  function updateTrack() {
+    profile = calculateProfile();
+    resetRide();
+  }
+
+  function startRide() {
+    resetRide();
+    if (rideButton.disabled) return;
+    rideButton.disabled = true;
+    rideStatus.textContent = 'Riding';
+    const { samples, readingAt, reachesEnd } = profile;
+    const finish = samples[samples.length - 1];
+    let startedAt;
+    let segment = 1;
+    function advance(timestamp) {
+      startedAt ??= timestamp;
+      const elapsed = (timestamp - startedAt) / 1000;
+      if (elapsed >= finish.time) {
+        position = finish;
+        animationFrame = null;
+        rideButton.disabled = false;
+        rideStatus.textContent = reachesEnd ? 'Ride complete' : 'End of forward travel';
+      } else {
+        while (samples[segment].time < elapsed) segment++;
+        const before = samples[segment - 1];
+        const after = samples[segment];
+        const fraction = (elapsed - before.time) / (after.time - before.time);
+        // Approximate acceleration as constant over each short sample interval.
+        const progress = fraction * (2 * before.speedMps +
+          (after.speedMps - before.speedMps) * fraction) / (before.speedMps + after.speedMps);
+        position = {
+          ...readingAt(before.offset + (after.offset - before.offset) * progress),
+          distance: before.distance + (after.distance - before.distance) * progress
+        };
+        animationFrame = window.requestAnimationFrame(advance);
+      }
+      render();
+    }
+    animationFrame = window.requestAnimationFrame(advance);
+  }
+
+  rideButton.addEventListener('click', startRide);
+  document.getElementById('reset').addEventListener('click', resetRide);
+  updateTrack();
   window.addEventListener('resize', render);
 </script>
 </body>

@@ -50,3 +50,7 @@ Asked how many build stages there are. Confirmed five total, with three complete
 ## 2026-11-23
 
 Revalidate Stage 3, then build and validate Stage 4 if it passes. Stage 3 passed the three preset checks. Stage 4 added a gravity-driven ride, live readouts and plot markers, and Reset. Simulated animation checks passed for launch, the hand-calculated valley values, slowdown, ride completion, Reset, and cancellation when changing the track.
+
+## 2026-11-23
+
+Build and validate Stage 5, then validate all five stages together. Added high-g stops, rollback animation, and persistent failure details. Stage 5 checks passed for the high-g and rollback presets, marker clearing, and the lower-limit branch with synthetic data. The integrated five-stage regression passed at simulated narrow and wide widths. The current three-point track geometry cannot produce negative rider loads on its reachable segment.

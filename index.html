@@ -17,6 +17,7 @@
   canvas { display: block; width: 100%; background: #111c2e; border-radius: 8px; }
   #track { height: clamp(235px, 38vw, 390px); touch-action: none; cursor: grab; }
   #track.dragging { cursor: grabbing; }
+  #failure-details { color: #ffb5b5; margin: .75rem 0 0; }
   label { display: block; margin: 0 0 4px; }
   select { width: 100%; min-height: 44px; margin-bottom: 12px; padding: 0 8px; border-radius: 8px; border: 1px solid #51627b; background: #263750; color: inherit; font: inherit; }
   .plots canvas { height: 165px; }
@@ -39,6 +40,7 @@
     <section aria-labelledby="track-title">
       <h2 id="track-title">Track editor</h2>
       <canvas id="track" aria-label="Side view of the track with three draggable points."></canvas>
+      <p id="failure-details" role="status" hidden></p>
     </section>
     <aside aria-labelledby="ride-title">
       <h2 id="ride-title">Ride controls</h2>
@@ -83,12 +85,14 @@
   const preset = document.getElementById('preset');
   const rideButton = document.getElementById('ride');
   const rideStatus = document.getElementById('ride-status');
+  const failureDetails = document.getElementById('failure-details');
   let points = presets.starter.map(point => [...point]);
   let trackChart;
   let drag;
   let profile;
   let position;
   let animationFrame = null;
+  let failure;
   const gravity = 9.81;
   const mphPerMeterPerSecond = 2.23694;
   const cyan = '#56e4df';
@@ -226,6 +230,19 @@
       ctx.fill();
     }
     ctx.restore();
+
+    if (failure) {
+      const markerX = x(startX + failure.offset);
+      const markerY = y(failure.height);
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 9, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#ff8f91';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#ffb5b5';
+      ctx.textAlign = markerX > x(100) ? 'right' : 'left';
+      ctx.fillText('Failure', markerX + (markerX > x(100) ? -12 : 12), markerY - 10);
+    }
   }
 
   function pointerPosition(event) {
@@ -331,9 +348,12 @@
   function resetRide() {
     if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
     animationFrame = null;
+    failure = undefined;
+    failureDetails.hidden = true;
+    failureDetails.textContent = '';
     position = profile.samples[0];
-    rideButton.disabled = profile.samples.length === 1;
-    rideStatus.textContent = rideButton.disabled ? 'Car cannot start from rest on this track' : 'Ready to ride';
+    rideButton.disabled = false;
+    rideStatus.textContent = 'Ready to ride';
     render();
   }
 
@@ -342,28 +362,74 @@
     resetRide();
   }
 
+  function markFailure(reading, reason) {
+    failure = reading;
+    failureDetails.textContent = reason + ' · ' + reading.distance.toFixed(2) +
+      ' m along track · ' + reading.speed.toFixed(2) + ' mph · ' + reading.load.toFixed(2) + ' g';
+    failureDetails.hidden = false;
+  }
+
+  function firstLoadFailure({ samples, readingAt }) {
+    for (let i = 0; i < samples.length; i++) {
+      const after = samples[i];
+      if (after.load >= -1 && after.load <= 4) continue;
+      const limit = after.load > 4 ? 4 : -1;
+      const reason = 'Rider load crossed the ' + limit + ' g limit';
+      if (i === 0) return { ...after, reason };
+      const before = samples[i - 1];
+      let low = before.offset;
+      let high = after.offset;
+      for (let step = 0; step < 40; step++) {
+        const midpoint = (low + high) / 2;
+        const load = readingAt(midpoint).load;
+        if (limit === 4 ? load > limit : load < limit) high = midpoint;
+        else low = midpoint;
+      }
+      const crossing = readingAt((low + high) / 2);
+      const fraction = (crossing.offset - before.offset) / (after.offset - before.offset);
+      const distance = before.distance + (after.distance - before.distance) * fraction;
+      const crossingSpeed = crossing.speedMps;
+      const partialTime = 2 * (distance - before.distance) / (before.speedMps + crossingSpeed);
+      return { ...crossing, reason, distance, time: before.time + partialTime };
+    }
+  }
+
   function startRide() {
     resetRide();
-    if (rideButton.disabled) return;
+    const { samples, readingAt, reachesEnd } = profile;
+    if (samples.length === 1) {
+      markFailure(samples[0], 'Car stalled at the start');
+      rideStatus.textContent = 'Ride stopped';
+      render();
+      return;
+    }
     rideButton.disabled = true;
     rideStatus.textContent = 'Riding';
-    const { samples, readingAt, reachesEnd } = profile;
     const finish = samples[samples.length - 1];
+    const loadFailure = firstLoadFailure(profile);
+    const rollsBack = !reachesEnd && !loadFailure;
+    const stopTime = loadFailure?.time ?? (rollsBack ? 2 * finish.time : finish.time);
     let startedAt;
-    let segment = 1;
     function advance(timestamp) {
       startedAt ??= timestamp;
       const elapsed = (timestamp - startedAt) / 1000;
-      if (elapsed >= finish.time) {
-        position = finish;
+      const returning = rollsBack && elapsed >= finish.time;
+      if (returning && !failure) {
+        markFailure(finish, 'Car ran out of speed before the crest');
+        rideStatus.textContent = 'Rolling back';
+      }
+      if (elapsed >= stopTime) {
+        position = loadFailure ?? (rollsBack ? samples[0] : finish);
         animationFrame = null;
         rideButton.disabled = false;
-        rideStatus.textContent = reachesEnd ? 'Ride complete' : 'End of forward travel';
+        if (loadFailure) markFailure(loadFailure, loadFailure.reason);
+        rideStatus.textContent = loadFailure ? 'Ride stopped' : (rollsBack ? 'Rolled back to the start' : 'Ride complete');
       } else {
-        while (samples[segment].time < elapsed) segment++;
+        const travelTime = returning ? 2 * finish.time - elapsed : elapsed;
+        const segment = samples.findIndex(sample => sample.time >= travelTime && sample.time > 0);
         const before = samples[segment - 1];
         const after = samples[segment];
-        const fraction = (elapsed - before.time) / (after.time - before.time);
+        const fraction = (travelTime - before.time) / (after.time - before.time);
         // Approximate acceleration as constant over each short sample interval.
         const progress = fraction * (2 * before.speedMps +
           (after.speedMps - before.speedMps) * fraction) / (before.speedMps + after.speedMps);

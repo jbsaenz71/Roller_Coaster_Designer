@@ -14,3 +14,11 @@ Filled in all seven sections and worked out the expected valley readings of 31.3
 ## 2026-11-23
 
 Suggest how to build the roller coaster simulator in four to six stages. Proposed five stages with a check for each, from the interface mockup through failure handling and validation.
+
+## 2026-11-23
+
+"Can you show me it?" Interpreted as a request to visualize the proposed build stages and their expected results.
+
+## 2026-11-23
+
+Asked for suggestions to improve the roller coaster simulator and thoughts on adding loops and Mickey Mouse as the rider. Suggested track presets and failure details, a loop preset after the core ride works, and an original rider for the app.
